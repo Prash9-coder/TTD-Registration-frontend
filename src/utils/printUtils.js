@@ -1,4 +1,18 @@
-export const printTeam = (team) => {
+import { getImageUrl } from './imageHelper';
+
+export const printTeam = async (team) => {
+  // ✅ Fetch full team details first
+  try {
+    const API_URL = process.env.REACT_APP_API_URL || 'https://ttd-registration.onrender.com';
+    const response = await fetch(`${API_URL}/api/teams/${team._id}`);
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error('Failed to fetch full team details');
+    }
+
+    const fullTeam = result.data;
+
     const win = window.open('', '_blank', 'width=900,height=700');
 
     const css = `
@@ -19,6 +33,11 @@ export const printTeam = (team) => {
       * {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
+      }
+      
+      img {
+        max-width: 100% !important;
+        page-break-inside: avoid;
       }
     }
 
@@ -49,7 +68,7 @@ export const printTeam = (team) => {
     }
 
     .member-card {
-      height: 400px;
+      min-height: 400px;
       border: 2px solid #d1d5db;
       border-radius: 10px;
       padding: 16px;
@@ -86,6 +105,7 @@ export const printTeam = (team) => {
       border-radius: 6px;
       object-fit: cover;
       border: 2px solid #9ca3af;
+      display: block;
     }
 
     hr {
@@ -111,15 +131,25 @@ export const printTeam = (team) => {
       color: #6b7280;
       border: 2px solid #9ca3af;
     }
+
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: #6b7280;
+    }
   `;
 
     let membersHtml = '';
-    team.members.forEach((member, i) => {
-        const photoHtml = member.photoPreview
-            ? `<img class="member-photo" src="${member.photoPreview}" alt="${member.name}">`
-            : `<div class="no-photo">${(member.name || '')[0] || '?'}</div>`;
 
-        membersHtml += `
+    fullTeam.members.forEach((member, i) => {
+      // ✅ FIXED: Use photo_path instead of photoPreview
+      const photoUrl = getImageUrl(member.photo_path || member.photo);
+
+      const photoHtml = photoUrl
+        ? `<img class="member-photo" src="${photoUrl}" alt="${member.name}" crossorigin="anonymous">`
+        : `<div class="no-photo">${(member.name || '')[0] || '?'}</div>`;
+
+      membersHtml += `
       <div class="member-card">
         <div>
           <div class="member-title">${member.name}</div>
@@ -149,32 +179,75 @@ export const printTeam = (team) => {
       </div>
     `;
 
-        // Page break after every 2 members
-        if ((i + 1) % 2 === 0 && i !== team.members.length - 1) {
-            membersHtml += `<div class="page-break"></div>`;
-        }
+      // Page break after every 2 members
+      if ((i + 1) % 2 === 0 && i !== fullTeam.members.length - 1) {
+        membersHtml += `<div class="page-break"></div>`;
+      }
     });
 
     win.document.write(`
     <html>
     <head>
-      <title>Print - ${team.team_name}</title>
+      <title>Print - ${fullTeam.team_name}</title>
+      <meta charset="UTF-8">
       <style>${css}</style>
     </head>
     <body>
       <div class="header">
         <h1>TTD Team Registration</h1>
-        <div class="team-name">${team.team_name}</div>
-        <div class="team-meta">Members: ${team.members_count}</div>
+        <div class="team-name">${fullTeam.team_name}</div>
+        <div class="team-meta">Members: ${fullTeam.members_count}</div>
       </div>
 
       ${membersHtml}
 
       <script>
+        // ✅ Wait for all images to load before printing
         window.onload = function() {
+          var images = document.getElementsByTagName('img');
+          var loadedImages = 0;
+          var totalImages = images.length;
+
+          if (totalImages === 0) {
+            // No images, print immediately
+            setTimeout(function() {
+              window.print();
+            }, 500);
+            return;
+          }
+
+          function imageLoaded() {
+            loadedImages++;
+            console.log('Loaded ' + loadedImages + '/' + totalImages + ' images');
+            
+            if (loadedImages === totalImages) {
+              console.log('All images loaded, printing...');
+              setTimeout(function() {
+                window.print();
+              }, 1000);
+            }
+          }
+
+          // Add load event listeners to all images
+          for (var i = 0; i < images.length; i++) {
+            if (images[i].complete) {
+              imageLoaded();
+            } else {
+              images[i].addEventListener('load', imageLoaded);
+              images[i].addEventListener('error', function() {
+                console.error('Image failed to load:', this.src);
+                imageLoaded(); // Count it anyway
+              });
+            }
+          }
+
+          // Fallback: print after 5 seconds even if images aren't loaded
           setTimeout(function() {
-            window.print();
-          }, 500);
+            if (loadedImages < totalImages) {
+              console.warn('Timeout: Printing with ' + loadedImages + '/' + totalImages + ' images loaded');
+              window.print();
+            }
+          }, 5000);
         };
       </script>
     </body>
@@ -182,4 +255,9 @@ export const printTeam = (team) => {
   `);
 
     win.document.close();
+
+  } catch (error) {
+    console.error('❌ Print error:', error);
+    alert('Failed to prepare print view. Please try again.');
+  }
 };
