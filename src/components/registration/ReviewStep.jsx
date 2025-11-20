@@ -17,27 +17,10 @@ const ReviewStep = ({ onPrevious, onSuccess }) => {
         }
 
         setIsSubmitting(true);
-        showToast('Uploading photos and submitting registration...', 'info', 'Processing');
+        showToast('Submitting registration...', 'info', 'Processing');
 
         try {
-            // Step 1: Upload all photos
-            for (let i = 0; i < teamData.members.length; i++) {
-                const member = teamData.members[i];
-
-                if (member.photo) {
-                    const uploadResult = await uploadPhoto(member.photo);
-
-                    if (uploadResult.success) {
-                        member.photo_path = uploadResult.data.path;
-                    } else {
-                        throw new Error(`Failed to upload photo for Member ${i + 1}`);
-                    }
-                } else {
-                    throw new Error(`Photo missing for Member ${i + 1}`);
-                }
-            }
-
-            // Step 2: Submit team data
+            // Directly build payload (Cloudinary uploads already done)
             const submitPayload = {
                 team_name: teamData.team_name,
                 members_count: teamData.members_count,
@@ -58,7 +41,9 @@ const ReviewStep = ({ onPrevious, onSuccess }) => {
                     doorno: member.doorno,
                     pincode: member.pincode,
                     nearest_ttd_temple: member.nearest_ttd_temple,
-                    photo_path: member.photo_path
+
+                    // FINAL CORRECT VALUE (Cloudinary URL)
+                    photo_path: member.photoUrl || member.photo
                 }))
             };
 
@@ -88,6 +73,7 @@ const ReviewStep = ({ onPrevious, onSuccess }) => {
             setIsSubmitting(false);
         }
     };
+
 
     const jsonPayload = {
         team_name: teamData.team_name,
