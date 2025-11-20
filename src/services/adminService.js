@@ -112,6 +112,7 @@ export const deleteTeam = async (teamId) => {
 };
 
 // ✅ FIXED: Download JSON in exact required format (WITHOUT blood_group)
+// ✅ FIXED: Download JSON with direct Cloudinary photo URLs
 export const downloadTeamJSON = async (team) => {
     try {
         // Fetch full team details with unmasked data
@@ -119,18 +120,15 @@ export const downloadTeamJSON = async (team) => {
 
         // ✅ Helper to format DOB as YYYY-MM-DD
         const formatDobForJSON = (dob, dobRaw) => {
-            // Use raw DOB if available
             const dateToUse = dobRaw || dob;
 
             if (!dateToUse) return '';
 
-            // If already DD-MM-YYYY, convert to YYYY-MM-DD
             if (typeof dateToUse === 'string' && dateToUse.match(/^\d{2}-\d{2}-\d{4}$/)) {
                 const [day, month, year] = dateToUse.split('-');
                 return `${year}-${month}-${day}`;
             }
 
-            // If it's a Date object or ISO string
             const date = new Date(dateToUse);
             if (isNaN(date.getTime())) return '';
 
@@ -140,7 +138,7 @@ export const downloadTeamJSON = async (team) => {
             return `${year}-${month}-${day}`;
         };
 
-        // ✅ Create JSON in exact required format (NO blood_group field)
+        // ✅ Create JSON with direct Cloudinary URLs
         const jsonData = {
             general: {
                 group_size: fullTeam.members_count,
@@ -149,7 +147,7 @@ export const downloadTeamJSON = async (team) => {
                 respect_existing: true,
                 aadhaar_autofill_wait_seconds: 4
             },
-            members: fullTeam.members.map((m, index) => ({
+            members: fullTeam.members.map((m) => ({
                 name: m.name || '',
                 dob: formatDobForJSON(m.dob, m.dobRaw),
                 age: String(m.age || ''),
@@ -165,7 +163,7 @@ export const downloadTeamJSON = async (team) => {
                 doorno: m.doorno || '',
                 pincode: m.pincode || '',
                 nearest_ttd_temple: m.nearest_ttd_temple || '',
-                photo: `images\\\\${index + 1}.jpg`
+                photo: m.photo_path || m.photo || ''  // ✅ Direct Cloudinary URL
             }))
         };
 
@@ -180,14 +178,13 @@ export const downloadTeamJSON = async (team) => {
         a.remove();
         URL.revokeObjectURL(url);
 
-        console.log('✅ JSON downloaded in required format (without blood_group)');
+        console.log('✅ JSON downloaded with direct Cloudinary URLs');
 
     } catch (error) {
         console.error('❌ JSON download error:', error);
         alert('Failed to download JSON. Please try again.');
     }
 };
-
 export const downloadPhotosZip = async (team) => {
     const JSZip = (await import('jszip')).default;
     const { saveAs } = await import('file-saver');
