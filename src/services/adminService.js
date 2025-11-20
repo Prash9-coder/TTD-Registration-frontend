@@ -111,39 +111,61 @@ export const deleteTeam = async (teamId) => {
     return response.json();
 };
 
-// ✅ FIXED: Fetch full team details before downloading JSON
-// ✅ FIXED: Download JSON with formatted dates
+// ✅ FIXED: Download JSON in exact required format (WITHOUT blood_group)
 export const downloadTeamJSON = async (team) => {
     try {
         // Fetch full team details with unmasked data
         const fullTeam = await fetchTeamFullDetails(team._id);
 
-        // Create JSON with full data
+        // ✅ Helper to format DOB as YYYY-MM-DD
+        const formatDobForJSON = (dob, dobRaw) => {
+            // Use raw DOB if available
+            const dateToUse = dobRaw || dob;
+
+            if (!dateToUse) return '';
+
+            // If already DD-MM-YYYY, convert to YYYY-MM-DD
+            if (typeof dateToUse === 'string' && dateToUse.match(/^\d{2}-\d{2}-\d{4}$/)) {
+                const [day, month, year] = dateToUse.split('-');
+                return `${year}-${month}-${day}`;
+            }
+
+            // If it's a Date object or ISO string
+            const date = new Date(dateToUse);
+            if (isNaN(date.getTime())) return '';
+
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        // ✅ Create JSON in exact required format (NO blood_group field)
         const jsonData = {
-            team_id: fullTeam._id,
-            team_name: fullTeam.team_name,
-            members_count: fullTeam.members_count,
-            submission_status: fullTeam.submission_status,
-            registered_date: fullTeam.submittedAt,
-            members: fullTeam.members.map(m => ({
-                name: m.name,
-                date_of_birth: m.dob,  // ✅ Already formatted as DD-MM-YYYY
-                age: m.age,
-                gender: m.gender,
-                aadhaar_number: m.id_number,
-                mobile_number: m.mobile,
-                email: m.email,
-                address: {
-                    door_no: m.doorno,
-                    street: m.street,
-                    city: m.city,
-                    district: m.district,
-                    state: m.state,
-                    pincode: m.pincode
-                },
-                nearest_ttd_temple: m.nearest_ttd_temple,
-                photo_url: m.photo_path,
-                aadhaar_verified: m.aadhaar_verified || false
+            general: {
+                group_size: fullTeam.members_count,
+                auto_select_date: true,
+                auto_download_ticket: true,
+                respect_existing: true,
+                aadhaar_autofill_wait_seconds: 4
+            },
+            members: fullTeam.members.map((m, index) => ({
+                name: m.name || '',
+                dob: formatDobForJSON(m.dob, m.dobRaw),
+                age: String(m.age || ''),
+                gender: m.gender || '',
+                id_proof_type: 'Aadhaar',
+                id_number: m.id_number || '',
+                mobile: m.mobile || '',
+                email: m.email || '',
+                state: (m.state || '').toUpperCase(),
+                district: (m.district || '').toUpperCase(),
+                city: (m.city || '').toUpperCase(),
+                street: (m.street || '').toUpperCase(),
+                doorno: m.doorno || '',
+                pincode: m.pincode || '',
+                nearest_ttd_temple: m.nearest_ttd_temple || '',
+                photo: `images\\\\${index + 1}.jpg`
             }))
         };
 
@@ -152,17 +174,17 @@ export const downloadTeamJSON = async (team) => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${fullTeam.team_name.replace(/\s+/g, '_')}_Full_Details.json`;
+        a.download = `${fullTeam.team_name.replace(/\s+/g, '_')}_Registration.json`;
         document.body.appendChild(a);
         a.click();
         a.remove();
         URL.revokeObjectURL(url);
 
-        console.log('✅ JSON downloaded with full details');
+        console.log('✅ JSON downloaded in required format (without blood_group)');
 
     } catch (error) {
         console.error('❌ JSON download error:', error);
-        alert('Failed to download JSON with full details');
+        alert('Failed to download JSON. Please try again.');
     }
 };
 
