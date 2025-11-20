@@ -4,12 +4,8 @@ import { User, Calendar, Phone, Mail, MapPin, Upload, CheckCircle, XCircle } fro
 import { useRegistrationStore } from '../../context/RegistrationContext';
 import { validateAadhaar, calculateAge } from '../../utils/validation';
 import { INDIAN_STATES, TTD_TEMPLES } from '../../utils/constants';
-import { useToast } from '../common/ToastContainer';   // ✅ ADDED
 
 const MemberForm = ({ memberIndex }) => {
-
-    const { showToast } = useToast();   // ✅ ADDED
-
     const { teamData, updateMember } = useRegistrationStore();
     const member = teamData.members[memberIndex];
 
@@ -29,58 +25,12 @@ const MemberForm = ({ memberIndex }) => {
                 newData.age = calculateAge(value);
             }
 
+            // Persist to global store
             updateMember(memberIndex, newData);
             return newData;
         });
 
         setErrors(prev => ({ ...prev, [field]: '' }));
-    };
-
-    // ================================
-    // 🔥 FETCH MEMBER BY AADHAAR
-    // ================================
-    const fetchMemberByAadhaar = async (aadhaar) => {
-        try {
-            if (!aadhaar || aadhaar.length !== 12) return;
-
-            const API_URL = process.env.REACT_APP_API_URL || 'https://ttd-registration.onrender.com';
-
-            const res = await fetch(`${API_URL}/api/member/by-aadhaar/${aadhaar}`);
-            const result = await res.json();
-
-            if (result.success && result.exists) {
-                const m = result.data;
-
-                const autoData = {
-                    ...formData,
-                    name: m.name,
-                    dob: m.dob,
-                    age: calculateAge(m.dob),
-                    gender: m.gender,
-                    id_number: m.id_number,
-                    mobile: m.mobile,
-                    email: m.email,
-                    state: m.state,
-                    district: m.district,
-                    city: m.city,
-                    street: m.street,
-                    doorno: m.doorno,
-                    pincode: m.pincode,
-                    nearest_ttd_temple: m.nearest_ttd_temple,
-                    photoUrl: m.photo_path,
-                    photoPreview: m.photo_path,
-                    photo: m.photo_path
-                };
-
-                setFormData(autoData);
-                updateMember(memberIndex, autoData);
-
-                showToast('Existing member found! Auto-filled details.', 'success');
-            }
-
-        } catch (error) {
-            console.error("Aadhaar autofill error:", error);
-        }
     };
 
     const handleAadhaarValidation = (aadhaar) => {
@@ -90,14 +40,12 @@ const MemberForm = ({ memberIndex }) => {
         setErrors(prev => ({ ...prev, id_number: result.valid ? '' : result.message }));
     };
 
-    // ================================
-    // 🔥 PHOTO UPLOAD (CLEANED)
-    // ================================
+    // ✅ Robust photo upload + save URL as photoUrl (and photo for backward compat)
     const handlePhotoUpload = async (e) => {
         const file = e.target.files && e.target.files[0];
         if (!file) return;
 
-        // Validation
+        // Validate MIME and size
         if (!['image/jpeg', 'image/jpg'].includes(file.type)) {
             setErrors(prev => ({ ...prev, photo: 'Only JPG/JPEG files are allowed' }));
             return;
@@ -107,13 +55,14 @@ const MemberForm = ({ memberIndex }) => {
             return;
         }
 
-        // temp preview
+        // Show temporary preview & uploading state
         const tempPreview = URL.createObjectURL(file);
         setFormData(prev => {
             const newData = { ...prev, photoUploading: true, photoPreview: tempPreview };
             updateMember(memberIndex, newData);
             return newData;
         });
+        setErrors(prev => ({ ...prev, photo: '' }));
 
         try {
             const API_URL = process.env.REACT_APP_API_URL || 'https://ttd-registration.onrender.com';
@@ -127,19 +76,34 @@ const MemberForm = ({ memberIndex }) => {
                 body: fd
             });
 
+            // try parse JSON safely
             const result = await response.json().catch(() => null);
 
-            if (!response.ok || !result.success) {
-                throw new Error(result?.message || 'Upload failed');
+            if (!response.ok) {
+                // If backend gave json error message, prefer it
+                const msg = (result && (result.message || JSON.stringify(result))) || `Upload failed with status ${response.status}`;
+                throw new Error(msg);
             }
 
-            const finalUrl = result.data.url;
-            const cloudinaryId = result.data.cloudinary_id;
+            if (!result || !result.success || !result.data) {
+                const msg = (result && (result.message || 'Invalid upload response')) || 'Upload failed';
+                throw new Error(msg);
+            }
+
+            console.log('✅ Upload successful:', result.data);
+
+            // Prefer secure_url if present, else url
+            const finalUrl = result.data.secure_url || result.data.url || result.data.public_url || null;
+            const cloudinaryId = result.data.public_id || result.data.cloudinary_id || null;
+
+            if (!finalUrl) {
+                throw new Error('Upload succeeded but no URL returned by server');
+            }
 
             const uploadedData = {
                 ...formData,
-                photo: finalUrl,
-                photoUrl: finalUrl,
+                photo: finalUrl,         // backward compatibility
+                photoUrl: finalUrl,      // explicit field other components should use
                 cloudinary_id: cloudinaryId,
                 photoPreview: finalUrl,
                 photoUploading: false
@@ -149,52 +113,103 @@ const MemberForm = ({ memberIndex }) => {
             updateMember(memberIndex, uploadedData);
             setErrors(prev => ({ ...prev, photo: '' }));
 
+            console.log('✅ Photo URL saved:', finalUrl);
+
+            // revoke temp preview
             URL.revokeObjectURL(tempPreview);
-
-        } catch (err) {
-            console.error("Upload error:", err);
-
-            setErrors(prev => ({ ...prev, photo: err.message }));
+        } catch (error) {
+            console.error('❌ Upload error:', error);
+            setErrors(prev => ({ ...prev, photo: error.message || 'Upload failed. Please try again.' }));
 
             setFormData(prev => {
                 const newData = { ...prev, photoUploading: false, photoPreview: null };
+                // do NOT wipe existing photoUrl if it was present previously; only clear if upload replaced it
+                if (!prev.photo) newData.photo = null;
                 updateMember(memberIndex, newData);
                 return newData;
             });
 
-            URL.revokeObjectURL(tempPreview);
+            try { URL.revokeObjectURL(tempPreview); } catch (_) { /* ignore */ }
         }
     };
 
     return (
-        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
-
+        <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="space-y-6"
+        >
             <div className="grid md:grid-cols-2 gap-6">
-
-                {/* Aadhaar Input */}
+                {/* Full Name */}
                 <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Aadhaar Number *</label>
-
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        <User className="w-4 h-4 inline mr-1" />
+                        Full Name *
+                    </label>
                     <input
                         type="text"
-                        value={formData.id_number || ''}
-                        onChange={(e) => handleChange('id_number', e.target.value)}
-                        onBlur={() => {
-                            handleAadhaarValidation(formData.id_number);
-                            fetchMemberByAadhaar(formData.id_number);  // 🔥 CALLING FIXED FUNCTION
-                        }}
-                        maxLength="12"
-                        className={`w-full px-4 py-3 border-2 rounded-xl ${errors.id_number ? 'border-red-500' : aadhaarStatus.valid ? 'border-green-500' : 'border-gray-300'
-                            }`}
-                        placeholder="Enter 12-digit Aadhaar"
+                        value={formData.name || ''}
+                        onChange={(e) => handleChange('name', e.target.value)}
+                        className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.name ? 'border-red-500' : 'border-gray-300'}`}
+                        placeholder="Enter full name"
                     />
+                    {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
+                </div>
 
-                    {errors.id_number && (
-                        <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
-                            <XCircle className="w-4 h-4" />
-                            {errors.id_number}
-                        </p>
-                    )}
+                {/* Date of Birth */}
+                <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        <Calendar className="w-4 h-4 inline mr-1" />
+                        Date of Birth *
+                    </label>
+                    <input
+                        type="date"
+                        value={formData.dob || ''}
+                        onChange={(e) => handleChange('dob', e.target.value)}
+                        max={new Date().toISOString().split('T')[0]}
+                        className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.dob ? 'border-red-500' : 'border-gray-300'}`}
+                    />
+                    {errors.dob && <p className="text-red-500 text-sm mt-1">{errors.dob}</p>}
+                </div>
+
+                {/* Age */}
+                <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Age</label>
+                    <input
+                        type="number"
+                        value={formData.age || ''}
+                        readOnly
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50 cursor-not-allowed"
+                        placeholder="Auto-calculated"
+                    />
+                </div>
+
+                {/* Gender */}
+                <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Gender *</label>
+                    <select
+                        value={formData.gender || ''}
+                        onChange={(e) => handleChange('gender', e.target.value)}
+                        className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.gender ? 'border-red-500' : 'border-gray-300'}`}
+                    >
+                        <option value="">Select gender</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                    </select>
+                    {errors.gender && <p className="text-red-500 text-sm mt-1">{errors.gender}</p>}
+                </div>
+
+                {/* ID Proof Type */}
+                <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">ID Proof Type</label>
+                    <input
+                        type="text"
+                        value="Aadhaar"
+                        readOnly
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50 cursor-not-allowed"
+                    />
                 </div>
 
                 {/* Aadhaar Number */}
@@ -204,9 +219,7 @@ const MemberForm = ({ memberIndex }) => {
                         type="text"
                         value={formData.id_number || ''}
                         onChange={(e) => handleChange('id_number', e.target.value)}
-                        onBlur={() => {
-                            handleAadhaarValidation(formData.id_number);
-                        }}
+                        onBlur={() => handleAadhaarValidation(formData.id_number)}
                         maxLength="12"
                         className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.id_number ? 'border-red-500' : aadhaarStatus.valid ? 'border-green-500' : 'border-gray-300'}`}
                         placeholder="Enter 12-digit Aadhaar"
