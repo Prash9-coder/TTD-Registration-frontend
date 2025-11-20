@@ -3,7 +3,8 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Send, User, MapPin, Phone, Mail, Eye, EyeOff } from 'lucide-react';
 import { useRegistrationStore } from '../../context/RegistrationContext';
 import { useToast } from '../common/ToastContainer';
-import { uploadPhoto, submitTeam } from '../../services/api';
+import { submitTeam } from '../../services/api';
+import { getImageUrl } from '../../utils/imageHelper';
 
 const ReviewStep = ({ onPrevious, onSuccess }) => {
     const { teamData } = useRegistrationStore();
@@ -20,32 +21,49 @@ const ReviewStep = ({ onPrevious, onSuccess }) => {
         showToast('Submitting registration...', 'info', 'Processing');
 
         try {
-            // Directly build payload (Cloudinary uploads already done)
+            // Validate all photos are uploaded
+            const missingPhotos = teamData.members.filter((m, i) => {
+                const hasPhoto = m.photo && typeof m.photo === 'string' && m.photo.startsWith('http');
+                if (!hasPhoto) {
+                    console.error(`Member ${i + 1} (${m.name}) missing photo:`, m.photo);
+                }
+                return !hasPhoto;
+            });
+
+            if (missingPhotos.length > 0) {
+                throw new Error(`${missingPhotos.length} member(s) are missing photos. Please upload all photos.`);
+            }
+
+            // Build payload with Cloudinary URLs
             const submitPayload = {
                 team_name: teamData.team_name,
                 members_count: teamData.members_count,
-                consent_given: teamData.consent_given,
-                members: teamData.members.map(member => ({
-                    name: member.name,
-                    dob: member.dob,
-                    age: Number(member.age),
-                    gender: member.gender,
-                    id_proof_type: 'Aadhaar',
-                    id_number: member.id_number,
-                    mobile: member.mobile,
-                    email: member.email,
-                    state: member.state,
-                    district: member.district,
-                    city: member.city,
-                    street: member.street,
-                    doorno: member.doorno,
-                    pincode: member.pincode,
-                    nearest_ttd_temple: member.nearest_ttd_temple,
+                consent_given: teamData.consent_given || true,
+                members: teamData.members.map((member, index) => {
+                    console.log(`Member ${index + 1} photo:`, member.photo);
 
-                    // FINAL CORRECT VALUE (Cloudinary URL)
-                    photo_path: member.photoUrl || member.photo
-                }))
+                    return {
+                        name: member.name,
+                        dob: member.dob,
+                        age: Number(member.age),
+                        gender: member.gender,
+                        id_proof_type: 'Aadhaar',
+                        id_number: member.id_number,
+                        mobile: member.mobile,
+                        email: member.email,
+                        state: member.state,
+                        district: member.district,
+                        city: member.city,
+                        street: member.street,
+                        doorno: member.doorno,
+                        pincode: member.pincode,
+                        nearest_ttd_temple: member.nearest_ttd_temple,
+                        photo_path: member.photo  // ✅ Cloudinary URL
+                    };
+                })
             };
+
+            console.log('📤 Submitting payload:', submitPayload);
 
             const result = await submitTeam(submitPayload);
 
@@ -62,7 +80,7 @@ const ReviewStep = ({ onPrevious, onSuccess }) => {
             }
 
         } catch (error) {
-            console.error('Submission error:', error);
+            console.error('❌ Submission error:', error);
             showToast(
                 error.message || 'Failed to submit registration. Please try again.',
                 'error',
@@ -74,11 +92,10 @@ const ReviewStep = ({ onPrevious, onSuccess }) => {
         }
     };
 
-
     const jsonPayload = {
         team_name: teamData.team_name,
         members_count: teamData.members_count,
-        consent_given: teamData.consent_given,
+        consent_given: teamData.consent_given || true,
         members: teamData.members.map(m => ({
             name: m.name,
             dob: m.dob,
@@ -96,7 +113,8 @@ const ReviewStep = ({ onPrevious, onSuccess }) => {
                 doorno: m.doorno,
                 pincode: m.pincode
             },
-            nearest_ttd_temple: m.nearest_ttd_temple
+            nearest_ttd_temple: m.nearest_ttd_temple,
+            photo_path: m.photo
         }))
     };
 
@@ -126,46 +144,74 @@ const ReviewStep = ({ onPrevious, onSuccess }) => {
             <div>
                 <h3 className="text-xl font-bold text-gray-800 mb-4">Team Members</h3>
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {teamData.members.map((member, index) => (
-                        <motion.div
-                            key={index}
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ delay: index * 0.05 }}
-                            className="bg-white rounded-xl p-4 border-2 border-gray-200 hover:border-blue-300 hover:shadow-lg transition-all"
-                        >
-                            <div className="flex items-start gap-3">
-                                {member.photoPreview && (
-                                    <img
-                                        src={member.photoPreview}
-                                        alt={member.name}
-                                        className="w-20 h-20 rounded-lg object-cover border-2 border-blue-200"
-                                    />
-                                )}
-                                <div className="flex-1 min-w-0">
-                                    <h4 className="font-bold text-gray-800 truncate flex items-center gap-1">
-                                        <User className="w-4 h-4 text-blue-600" />
-                                        {member.name}
-                                    </h4>
-                                    <p className="text-sm text-gray-600">
-                                        Age: {member.age} | {member.gender}
-                                    </p>
-                                    <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
-                                        <Phone className="w-3 h-3" />
-                                        {member.mobile}
-                                    </p>
-                                    <p className="text-xs text-gray-500 flex items-center gap-1 truncate">
-                                        <Mail className="w-3 h-3" />
-                                        {member.email}
-                                    </p>
-                                    <p className="text-xs text-gray-500 flex items-center gap-1 mt-1 truncate">
-                                        <MapPin className="w-3 h-3" />
-                                        {member.city}, {member.state}
-                                    </p>
+                    {teamData.members.map((member, index) => {
+                        // ✅ FIXED: Use photo or photo_path
+                        const photoUrl = member.photo || member.photo_path;
+
+                        return (
+                            <motion.div
+                                key={index}
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ delay: index * 0.05 }}
+                                className="bg-white rounded-xl p-4 border-2 border-gray-200 hover:border-blue-300 hover:shadow-lg transition-all"
+                            >
+                                <div className="flex items-start gap-3">
+                                    {/* ✅ FIXED: Use getImageUrl with photo */}
+                                    {photoUrl ? (
+                                        <img
+                                            src={getImageUrl(photoUrl)}
+                                            alt={member.name}
+                                            className="w-20 h-20 rounded-lg object-cover border-2 border-blue-200 flex-shrink-0"
+                                            onError={(e) => {
+                                                console.error('Image failed to load:', member.name, photoUrl);
+                                                e.target.style.display = 'none';
+                                                const fallback = e.target.nextElementSibling;
+                                                if (fallback) fallback.style.display = 'flex';
+                                            }}
+                                        />
+                                    ) : null}
+
+                                    {/* Fallback avatar */}
+                                    <div
+                                        className="w-20 h-20 rounded-lg bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white font-bold text-2xl border-2 border-blue-300 shadow-lg flex-shrink-0"
+                                        style={{ display: photoUrl ? 'none' : 'flex' }}
+                                    >
+                                        {(member.name || '?')[0]?.toUpperCase()}
+                                    </div>
+
+                                    <div className="flex-1 min-w-0">
+                                        <h4 className="font-bold text-gray-800 truncate flex items-center gap-1">
+                                            <User className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                                            {member.name}
+                                        </h4>
+                                        <p className="text-sm text-gray-600">
+                                            Age: {member.age} | {member.gender}
+                                        </p>
+                                        <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
+                                            <Phone className="w-3 h-3 flex-shrink-0" />
+                                            <span className="truncate">{member.mobile}</span>
+                                        </p>
+                                        <p className="text-xs text-gray-500 flex items-center gap-1 truncate">
+                                            <Mail className="w-3 h-3 flex-shrink-0" />
+                                            <span className="truncate">{member.email}</span>
+                                        </p>
+                                        <p className="text-xs text-gray-500 flex items-center gap-1 mt-1 truncate">
+                                            <MapPin className="w-3 h-3 flex-shrink-0" />
+                                            <span className="truncate">{member.city}, {member.state}</span>
+                                        </p>
+
+                                        {/* Photo status indicator */}
+                                        {photoUrl && photoUrl.startsWith('http') ? (
+                                            <p className="text-xs text-green-600 mt-1">✓ Photo uploaded</p>
+                                        ) : (
+                                            <p className="text-xs text-red-600 mt-1">⚠ Photo missing</p>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                        </motion.div>
-                    ))}
+                            </motion.div>
+                        );
+                    })}
                 </div>
             </div>
 

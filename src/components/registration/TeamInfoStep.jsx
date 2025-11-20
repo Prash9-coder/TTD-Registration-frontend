@@ -240,13 +240,13 @@ const TeamInfoStep = ({ onNext }) => {
                             <Shield className="w-5 h-5 inline text-yellow-600 mr-1" />
                             I hereby consent to the collection and processing of Aadhaar and personal data for verification purposes.
                             I have read and agree to the{' '}
-                            <a href="#" className="text-blue-600 underline hover:text-blue-700">
+                            <button type="button" className="text-blue-600 underline hover:text-blue-700">
                                 Terms & Conditions
-                            </a>{' '}
+                            </button>{' '}
                             and{' '}
-                            <a href="#" className="text-blue-600 underline hover:text-blue-700">
+                            <button type="button" className="text-blue-600 underline hover:text-blue-700">
                                 Privacy Policy
-                            </a>.
+                            </button>.
                         </span>
                     </label>
                     {errors.consent && (

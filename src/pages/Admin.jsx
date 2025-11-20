@@ -31,15 +31,15 @@ const Admin = () => {
         sort: 'newest'
     });
 
-    // Load teams
+    // ✅ FIXED: Load teams once on mount
     useEffect(() => {
         loadTeams();
-    }, []);
+    }, []); // Empty dependency array
 
-    // Apply filters
+    // ✅ FIXED: Apply filters when filters or teams change
     useEffect(() => {
         applyFilters();
-    }, [filters, allTeams]);
+    }, [filters, allTeams]); // Removed applyFilters from dependencies
 
     const loadTeams = async () => {
         setLoading(true);

@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Eye, FileDown, Printer, Download, CheckCircle, Trash2, Image } from 'lucide-react';
+import { getImageUrl } from '../../utils/imageHelper';
 
 const TeamCard = ({ team, index, onViewDetails, onExportPDF, onPrint, onExportJSON, onDownloadPhotos, onVerify, onDelete }) => {
     const getStatusColor = (status) => {
@@ -121,30 +122,49 @@ const TeamCard = ({ team, index, onViewDetails, onExportPDF, onPrint, onExportJS
             <div className="p-6">
                 <h3 className="text-lg font-bold text-gray-800 mb-4">Team Members ({team.members.length})</h3>
                 <div className="grid md:grid-cols-3 gap-4">
-                    {team.members.map((member, idx) => (
-                        <motion.div
-                            key={idx}
-                            whileHover={{ scale: 1.02 }}
-                            className="border-2 border-gray-200 rounded-xl p-3 flex gap-3 items-center hover:border-blue-300 transition-all"
-                        >
-                            {member.photoPreview ? (
-                                <img
-                                    src={member.photoPreview}
-                                    alt={member.name}
-                                    className="w-16 h-16 rounded-lg object-cover border-2 border-gray-300"
-                                />
-                            ) : (
-                                <div className="w-16 h-16 rounded-lg bg-gray-200 flex items-center justify-center text-gray-500 font-bold text-xl border-2 border-gray-300">
-                                    {(member.name || '')[0] || '?'}
+                    {team.members.map((member, idx) => {
+                        // ✅ FIXED: Use photo_path or photo
+                        const photoUrl = member.photo_path || member.photo;
+
+                        return (
+                            <motion.div
+                                key={idx}
+                                whileHover={{ scale: 1.02 }}
+                                className="border-2 border-gray-200 rounded-xl p-3 flex gap-3 items-center hover:border-blue-300 transition-all"
+                            >
+                                {/* ✅ FIXED: Use getImageUrl with photo_path */}
+                                {photoUrl ? (
+                                    <img
+                                        src={getImageUrl(photoUrl)}
+                                        alt={member.name}
+                                        className="w-16 h-16 rounded-lg object-cover border-2 border-gray-300"
+                                        onError={(e) => {
+                                            console.error('Image load failed:', member.name, photoUrl);
+                                            e.target.style.display = 'none';
+                                            const fallback = e.target.nextElementSibling;
+                                            if (fallback && fallback.classList.contains('fallback-avatar')) {
+                                                fallback.style.display = 'flex';
+                                            }
+                                        }}
+                                    />
+                                ) : null}
+
+                                {/* Fallback Avatar */}
+                                <div
+                                    className="fallback-avatar w-16 h-16 rounded-lg bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center text-white font-bold text-2xl border-2 border-orange-300 shadow-lg"
+                                    style={{ display: photoUrl ? 'none' : 'flex' }}
+                                >
+                                    {(member.name || '?')[0]?.toUpperCase()}
                                 </div>
-                            )}
-                            <div className="flex-1 min-w-0">
-                                <h4 className="font-bold text-gray-800 truncate">{member.name}</h4>
-                                <p className="text-sm text-gray-600">{member.age} years • {member.gender}</p>
-                                <p className="text-xs text-gray-500 truncate">{member.city || member.state}</p>
-                            </div>
-                        </motion.div>
-                    ))}
+
+                                <div className="flex-1 min-w-0">
+                                    <h4 className="font-bold text-gray-800 truncate">{member.name}</h4>
+                                    <p className="text-sm text-gray-600">{member.age} years • {member.gender}</p>
+                                    <p className="text-xs text-gray-500 truncate">{member.city || member.state}</p>
+                                </div>
+                            </motion.div>
+                        );
+                    })}
                 </div>
             </div>
         </motion.div>

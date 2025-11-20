@@ -8,35 +8,20 @@ export const fetchAllTeams = async () => {
         return [];
     }
 
-    // Fetch details for each team
-    const detailPromises = result.data.map(async (team) => {
-        try {
-            const detailResponse = await fetch(`${API_URL}/api/teams/${team._id}`);
-            const detailResult = await detailResponse.json();
-            return detailResult.success ? detailResult.data : null;
-        } catch (error) {
-            console.error('Team detail fetch error:', error);
-            return null;
-        }
-    });
-
-    const details = await Promise.all(detailPromises);
-    const validTeams = details.filter(Boolean);
-
-    // Map to consistent format
-    return validTeams.map(team => ({
+    // ✅ Backend now returns members, no need to fetch details separately!
+    return result.data.map(team => ({
         _id: team._id,
         team_name: team.team_name || 'Unknown Team',
-        members_count: team.members_count || (Array.isArray(team.members) ? team.members.length : 0),
+        members_count: team.members_count || 0,
         submission_status: team.submission_status || 'pending',
-        submittedAt: team.created_at || team.createdAt || team.createdAtIso || null,
+        submittedAt: team.created_at || team.createdAt || null,
         members: Array.isArray(team.members) ? team.members.map(m => ({
             name: m.name || '',
             dob: m.dob ? new Date(m.dob).toISOString().split('T')[0] : '',
             age: m.age || '',
             gender: m.gender || '',
-            id_number: m.id_number_full || m.id_number || '',
-            mobile: m.mobile_full || m.mobile || '',
+            id_number: m.id_number || '',
+            mobile: m.mobile || '',
             email: m.email || '',
             state: m.state || '',
             district: m.district || '',
@@ -45,8 +30,10 @@ export const fetchAllTeams = async () => {
             doorno: m.doorno || '',
             pincode: m.pincode || '',
             nearest_ttd_temple: m.nearest_ttd_temple || '',
-            photo_path: m.photo_path || '',
-            photoPreview: m.photo_path ? `${API_URL}${m.photo_path}` : null
+
+            // ✅ FIXED: photo_path is already full Cloudinary URL - don't modify it!
+            photo_path: m.photo_path || null,
+            photo: m.photo_path || null  // Also set 'photo' for backward compatibility
         })) : []
     }));
 };
@@ -86,10 +73,13 @@ export const downloadPhotosZip = async (team) => {
     const folder = zip.folder(`${team.team_name.replace(/\s+/g, '_')}_Photos`);
 
     for (const member of team.members) {
-        if (!member.photoPreview) continue;
+        // ✅ Use photo_path instead of photoPreview
+        const photoUrl = member.photo_path || member.photo;
+
+        if (!photoUrl) continue;
 
         try {
-            const response = await fetch(member.photoPreview);
+            const response = await fetch(photoUrl);
             if (!response.ok) continue;
 
             const blob = await response.blob();
@@ -98,7 +88,7 @@ export const downloadPhotosZip = async (team) => {
 
             folder.file(`${safeName}.${fileExt}`, blob);
         } catch (error) {
-            console.error('Photo download failed:', error);
+            console.error('Photo download failed:', member.name, error);
         }
     }
 
