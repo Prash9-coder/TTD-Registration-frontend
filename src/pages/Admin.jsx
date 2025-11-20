@@ -9,6 +9,7 @@ import TeamCard from '../components/admin/TeamCard';
 import TeamDetailModal from '../components/admin/TeamDetailModal';
 import {
     fetchAllTeams,
+    fetchTeamFullDetails,  // ✅ NEW IMPORT
     verifyTeam,
     deleteTeam,
     downloadTeamJSON,
@@ -24,6 +25,7 @@ const Admin = () => {
     const [filteredTeams, setFilteredTeams] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedTeam, setSelectedTeam] = useState(null);
+    const [loadingTeamDetails, setLoadingTeamDetails] = useState(false); // ✅ NEW
 
     const [filters, setFilters] = useState({
         search: '',
@@ -31,15 +33,13 @@ const Admin = () => {
         sort: 'newest'
     });
 
-    // ✅ FIXED: Load teams once on mount
     useEffect(() => {
         loadTeams();
-    }, []); // Empty dependency array
+    }, []);
 
-    // ✅ FIXED: Apply filters when filters or teams change
     useEffect(() => {
         applyFilters();
-    }, [filters, allTeams]); // Removed applyFilters from dependencies
+    }, [filters, allTeams]);
 
     const loadTeams = async () => {
         setLoading(true);
@@ -59,19 +59,16 @@ const Admin = () => {
     const applyFilters = () => {
         let result = [...allTeams];
 
-        // Search filter
         if (filters.search) {
             result = result.filter(team =>
                 team.team_name.toLowerCase().includes(filters.search.toLowerCase())
             );
         }
 
-        // Status filter
         if (filters.status) {
             result = result.filter(team => team.submission_status === filters.status);
         }
 
-        // Sort
         result.sort((a, b) => {
             if (filters.sort === 'newest') {
                 return new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0);
@@ -90,6 +87,22 @@ const Admin = () => {
 
     const handleClearFilters = () => {
         setFilters({ search: '', status: '', sort: 'newest' });
+    };
+
+    // ✅ FIXED: Fetch full details before opening modal
+    const handleViewDetails = async (team) => {
+        setLoadingTeamDetails(true);
+        try {
+            console.log('Fetching full details for team:', team._id);
+            const fullTeamDetails = await fetchTeamFullDetails(team._id);
+            console.log('Full team details:', fullTeamDetails);
+            setSelectedTeam(fullTeamDetails);
+        } catch (error) {
+            console.error('Failed to load team details:', error);
+            showToast('Failed to load team details', 'error');
+        } finally {
+            setLoadingTeamDetails(false);
+        }
     };
 
     const handleVerifyTeam = async (teamId) => {
@@ -128,7 +141,7 @@ const Admin = () => {
 
     const handleExportJSON = (team) => {
         downloadTeamJSON(team);
-        showToast('JSON exported successfully', 'success');
+        showToast('Downloading JSON...', 'info');
     };
 
     const handleDownloadPhotos = async (team) => {
@@ -144,7 +157,7 @@ const Admin = () => {
 
     const handlePrint = (team) => {
         printTeam(team);
-        showToast('Opening print dialog...', 'info');
+        showToast('Preparing print...', 'info');
     };
 
     return (
@@ -194,17 +207,13 @@ const Admin = () => {
                     </div>
                 ) : (
                     <>
-                        {/* Stats */}
                         <StatsCards teams={allTeams} />
-
-                        {/* Filters */}
                         <FiltersBar
                             filters={filters}
                             setFilters={setFilters}
                             onClear={handleClearFilters}
                         />
 
-                        {/* Teams List */}
                         {filteredTeams.length === 0 ? (
                             <motion.div
                                 initial={{ opacity: 0, y: 20 }}
@@ -235,7 +244,7 @@ const Admin = () => {
                                         key={team._id}
                                         team={team}
                                         index={index}
-                                        onViewDetails={setSelectedTeam}
+                                        onViewDetails={handleViewDetails}  /* ✅ UPDATED */
                                         onExportPDF={handlePrint}
                                         onPrint={handlePrint}
                                         onExportJSON={handleExportJSON}
@@ -250,9 +259,23 @@ const Admin = () => {
                 )}
             </div>
 
-            {/* Detail Modal */}
+            {/* Detail Modal - ✅ Now receives full details */}
             {selectedTeam && (
-                <TeamDetailModal team={selectedTeam} onClose={() => setSelectedTeam(null)} />
+                <TeamDetailModal
+                    team={selectedTeam}
+                    onClose={() => setSelectedTeam(null)}
+                />
+            )}
+
+            {/* ✅ Loading overlay when fetching team details */}
+            {loadingTeamDetails && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 flex items-center justify-center">
+                    <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                        className="w-16 h-16 border-4 border-orange-600 border-t-transparent rounded-full"
+                    />
+                </div>
             )}
         </div>
     );

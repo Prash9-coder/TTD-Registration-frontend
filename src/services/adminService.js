@@ -19,8 +19,8 @@ export const fetchAllTeams = async () => {
             dob: m.dob ? new Date(m.dob).toISOString().split('T')[0] : '',
             age: m.age || '',
             gender: m.gender || '',
-            id_number: m.id_number || '',
-            mobile: m.mobile || '',
+            id_number: m.id_number || '',  // This will be masked from GET /api/teams
+            mobile: m.mobile || '',         // This will be masked from GET /api/teams
             email: m.email || '',
             state: m.state || '',
             district: m.district || '',
@@ -33,6 +33,62 @@ export const fetchAllTeams = async () => {
             photo: m.photo_path || null
         })) : []
     }));
+};
+
+// ✅ NEW: Fetch single team with FULL unmasked details
+export const fetchTeamFullDetails = async (teamId) => {
+    try {
+        console.log('Fetching full details for team ID:', teamId);
+
+        const response = await fetch(`${API_URL}/api/teams/${teamId}`);
+        const result = await response.json();
+
+        if (!result.success) {
+            throw new Error(result.message || 'Failed to fetch team details');
+        }
+
+        const team = result.data;
+
+        console.log('Raw team data from backend:', team);
+
+        return {
+            _id: team._id,
+            team_name: team.team_name,
+            members_count: team.members_count,
+            submission_status: team.submission_status,
+            submittedAt: team.created_at || team.createdAt,
+            members: team.members.map(m => {
+                console.log('Member full data:', {
+                    name: m.name,
+                    id_number: m.id_number,
+                    mobile: m.mobile
+                });
+
+                return {
+                    name: m.name,
+                    dob: m.dob ? new Date(m.dob).toISOString().split('T')[0] : '',
+                    age: m.age,
+                    gender: m.gender,
+                    id_number: m.id_number,  // ✅ Full Aadhaar from GET /api/teams/:id
+                    mobile: m.mobile,        // ✅ Full Mobile from GET /api/teams/:id
+                    email: m.email,
+                    state: m.state,
+                    district: m.district,
+                    city: m.city,
+                    street: m.street,
+                    doorno: m.doorno,
+                    pincode: m.pincode,
+                    nearest_ttd_temple: m.nearest_ttd_temple,
+                    photo_path: m.photo_path,
+                    photo: m.photo_path,
+                    aadhaar_verified: m.aadhaar_verified
+                };
+            })
+        };
+    } catch (error) {
+        console.error('Fetch team full details error:', error);
+        throw error;
+    }
 };
 
 export const verifyTeam = async (teamId) => {
@@ -54,14 +110,7 @@ export const deleteTeam = async (teamId) => {
 export const downloadTeamJSON = async (team) => {
     try {
         // Fetch full team details with unmasked data
-        const response = await fetch(`${API_URL}/api/teams/${team._id}`);
-        const result = await response.json();
-
-        if (!result.success) {
-            throw new Error('Failed to fetch full team details');
-        }
-
-        const fullTeam = result.data;
+        const fullTeam = await fetchTeamFullDetails(team._id);
 
         // Create JSON with full data
         const jsonData = {
@@ -69,14 +118,14 @@ export const downloadTeamJSON = async (team) => {
             team_name: fullTeam.team_name,
             members_count: fullTeam.members_count,
             submission_status: fullTeam.submission_status,
-            registered_date: fullTeam.created_at,
+            registered_date: fullTeam.submittedAt,
             members: fullTeam.members.map(m => ({
                 name: m.name,
                 date_of_birth: m.dob,
                 age: m.age,
                 gender: m.gender,
-                aadhaar_number: m.id_number,  // ✅ Full Aadhaar (from GET /api/teams/:id)
-                mobile_number: m.mobile,      // ✅ Full Mobile (from GET /api/teams/:id)
+                aadhaar_number: m.id_number,  // ✅ Full Aadhaar
+                mobile_number: m.mobile,      // ✅ Full Mobile
                 email: m.email,
                 address: {
                     door_no: m.doorno,
@@ -111,7 +160,6 @@ export const downloadTeamJSON = async (team) => {
     }
 };
 
-// ✅ FIXED: Use photo_path for ZIP download
 export const downloadPhotosZip = async (team) => {
     const JSZip = (await import('jszip')).default;
     const { saveAs } = await import('file-saver');
@@ -132,8 +180,6 @@ export const downloadPhotosZip = async (team) => {
         }
 
         try {
-            console.log(`Downloading photo for ${member.name}:`, photoUrl);
-
             const response = await fetch(photoUrl);
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
