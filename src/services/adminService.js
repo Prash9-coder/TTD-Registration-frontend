@@ -35,6 +35,7 @@ export const fetchAllTeams = async () => {
     }));
 };
 
+// ✅ NEW: Fetch single team with FULL unmasked details
 // ✅ FIXED: Fetch single team with FULL unmasked details
 export const fetchTeamFullDetails = async (teamId) => {
     try {
@@ -93,6 +94,14 @@ export const fetchTeamFullDetails = async (teamId) => {
         console.error('Fetch team full details error:', error);
         throw error;
     }
+};
+
+export const verifyTeam = async (teamId) => {
+    const response = await fetch(`${API_URL}/api/teams/${teamId}/verify`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' }
+    });
+    return response.json();
 };
 
 export const deleteTeam = async (teamId) => {
@@ -156,6 +165,7 @@ export const downloadTeamJSON = async (team) => {
         alert('Failed to download JSON with full details');
     }
 };
+
 export const downloadPhotosZip = async (team) => {
     const JSZip = (await import('jszip')).default;
     const { saveAs } = await import('file-saver');
