@@ -175,6 +175,51 @@ const MemberForm = ({ memberIndex }) => {
         }
     };
 
+    const fetchMemberByAadhaar = async (aadhaar) => {
+        try {
+            if (!aadhaar || aadhaar.length !== 12) return;
+
+            const API_URL = process.env.REACT_APP_API_URL || 'https://ttd-registration.onrender.com';
+
+            const res = await fetch(`${API_URL}/api/member/by-aadhaar/${aadhaar}`);
+            const result = await res.json();
+
+            if (result.success && result.exists) {
+                const m = result.data;
+
+                const autoData = {
+                    ...formData,
+                    name: m.name,
+                    dob: m.dob,
+                    age: calculateAge(m.dob),
+                    gender: m.gender,
+                    id_number: m.id_number,
+                    mobile: m.mobile,
+                    email: m.email,
+                    state: m.state,
+                    district: m.district,
+                    city: m.city,
+                    street: m.street,
+                    doorno: m.doorno,
+                    pincode: m.pincode,
+                    nearest_ttd_temple: m.nearest_ttd_temple,
+                    photoUrl: m.photo_path,
+                    photoPreview: m.photo_path,
+                    photo: m.photo_path
+                };
+
+                setFormData(autoData);
+                updateMember(memberIndex, autoData);
+
+                showToast('Existing member found! Auto-filled details.', 'success');
+            }
+
+        } catch (error) {
+            console.error("Aadhaar autofill error:", error);
+        }
+    };
+
+
     return (
         <motion.div
             initial={{ opacity: 0, x: 20 }}
