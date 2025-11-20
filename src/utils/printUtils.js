@@ -1,7 +1,6 @@
 import { getImageUrl } from './imageHelper';
 
 export const printTeam = async (team) => {
-  // ✅ Fetch full team details first
   try {
     const API_URL = process.env.REACT_APP_API_URL || 'https://ttd-registration.onrender.com';
     const response = await fetch(`${API_URL}/api/teams/${team._id}`);
@@ -131,18 +130,30 @@ export const printTeam = async (team) => {
       color: #6b7280;
       border: 2px solid #9ca3af;
     }
-
-    .loading {
-      text-align: center;
-      padding: 20px;
-      color: #6b7280;
-    }
   `;
+
+    // ✅ Helper function to format DOB
+    const formatDOB = (dob) => {
+      if (!dob) return 'N/A';
+
+      // If already formatted as DD-MM-YYYY, return as is
+      if (typeof dob === 'string' && dob.match(/^\d{2}-\d{2}-\d{4}$/)) {
+        return dob;
+      }
+
+      // Otherwise format it
+      const date = new Date(dob);
+      if (isNaN(date.getTime())) return 'N/A';
+
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}-${month}-${year}`;
+    };
 
     let membersHtml = '';
 
     fullTeam.members.forEach((member, i) => {
-      // ✅ FIXED: Use photo_path instead of photoPreview
       const photoUrl = getImageUrl(member.photo_path || member.photo);
 
       const photoHtml = photoUrl
@@ -155,7 +166,7 @@ export const printTeam = async (team) => {
           <div class="member-title">${member.name}</div>
 
           <div class="field"><span class="label">Aadhaar:</span> ${member.id_number}</div>
-          <div class="field"><span class="label">DOB:</span> ${member.dob}</div>
+          <div class="field"><span class="label">DOB:</span> ${formatDOB(member.dob)}</div>
           <div class="field"><span class="label">Age:</span> ${member.age}</div>
           <div class="field"><span class="label">Gender:</span> ${member.gender}</div>
           <div class="field"><span class="label">Mobile:</span> ${member.mobile}</div>
@@ -179,7 +190,6 @@ export const printTeam = async (team) => {
       </div>
     `;
 
-      // Page break after every 2 members
       if ((i + 1) % 2 === 0 && i !== fullTeam.members.length - 1) {
         membersHtml += `<div class="page-break"></div>`;
       }
@@ -202,14 +212,12 @@ export const printTeam = async (team) => {
       ${membersHtml}
 
       <script>
-        // ✅ Wait for all images to load before printing
         window.onload = function() {
           var images = document.getElementsByTagName('img');
           var loadedImages = 0;
           var totalImages = images.length;
 
           if (totalImages === 0) {
-            // No images, print immediately
             setTimeout(function() {
               window.print();
             }, 500);
@@ -228,7 +236,6 @@ export const printTeam = async (team) => {
             }
           }
 
-          // Add load event listeners to all images
           for (var i = 0; i < images.length; i++) {
             if (images[i].complete) {
               imageLoaded();
@@ -236,12 +243,11 @@ export const printTeam = async (team) => {
               images[i].addEventListener('load', imageLoaded);
               images[i].addEventListener('error', function() {
                 console.error('Image failed to load:', this.src);
-                imageLoaded(); // Count it anyway
+                imageLoaded();
               });
             }
           }
 
-          // Fallback: print after 5 seconds even if images aren't loaded
           setTimeout(function() {
             if (loadedImages < totalImages) {
               console.warn('Timeout: Printing with ' + loadedImages + '/' + totalImages + ' images loaded');

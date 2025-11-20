@@ -6,9 +6,20 @@ import { getImageUrl } from '../../utils/imageHelper';
 const TeamDetailModal = ({ team, onClose }) => {
     if (!team) return null;
 
+    // ✅ FIXED: Format date properly
     const formatDate = (date) => {
         if (!date) return 'N/A';
-        return new Date(date).toLocaleDateString('en-IN', {
+
+        // If already formatted as DD-MM-YYYY, return as is
+        if (typeof date === 'string' && date.match(/^\d{2}-\d{2}-\d{4}$/)) {
+            return date;
+        }
+
+        // Otherwise, format the date
+        const d = new Date(date);
+        if (isNaN(d.getTime())) return 'N/A';
+
+        return d.toLocaleDateString('en-IN', {
             year: 'numeric',
             month: 'long',
             day: 'numeric'
@@ -55,7 +66,6 @@ const TeamDetailModal = ({ team, onClose }) => {
                     <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)] custom-scrollbar">
                         <div className="space-y-6">
                             {team.members.map((member, index) => {
-                                // ✅ FIXED: Use photo_path or photo with getImageUrl
                                 const photoUrl = member.photo_path || member.photo;
 
                                 return (
@@ -67,7 +77,7 @@ const TeamDetailModal = ({ team, onClose }) => {
                                         className="bg-gray-50 rounded-xl p-6 border-2 border-gray-200 hover:border-blue-300 transition-all"
                                     >
                                         <div className="flex gap-6 items-start">
-                                            {/* Photo - FIXED */}
+                                            {/* Photo */}
                                             <div className="flex-shrink-0">
                                                 {photoUrl ? (
                                                     <img
@@ -83,7 +93,6 @@ const TeamDetailModal = ({ team, onClose }) => {
                                                     />
                                                 ) : null}
 
-                                                {/* Fallback */}
                                                 <div
                                                     className="w-32 h-40 rounded-lg bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center text-white font-bold text-4xl border-4 border-white shadow-lg"
                                                     style={{ display: photoUrl ? 'none' : 'flex' }}

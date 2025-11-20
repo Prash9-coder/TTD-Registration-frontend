@@ -35,7 +35,7 @@ export const fetchAllTeams = async () => {
     }));
 };
 
-// ✅ NEW: Fetch single team with FULL unmasked details
+// ✅ FIXED: Fetch single team with FULL unmasked details
 export const fetchTeamFullDetails = async (teamId) => {
     try {
         console.log('Fetching full details for team ID:', teamId);
@@ -58,19 +58,23 @@ export const fetchTeamFullDetails = async (teamId) => {
             submission_status: team.submission_status,
             submittedAt: team.created_at || team.createdAt,
             members: team.members.map(m => {
-                console.log('Member full data:', {
-                    name: m.name,
-                    id_number: m.id_number,
-                    mobile: m.mobile
-                });
+                // ✅ FIXED: Format DOB properly
+                let formattedDob = '';
+                if (m.dob) {
+                    const date = new Date(m.dob);
+                    const day = String(date.getDate()).padStart(2, '0');
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const year = date.getFullYear();
+                    formattedDob = `${day}-${month}-${year}`; // DD-MM-YYYY
+                }
 
                 return {
                     name: m.name,
-                    dob: m.dob ? new Date(m.dob).toISOString().split('T')[0] : '',
+                    dob: formattedDob,  // ✅ Now formatted as DD-MM-YYYY
                     age: m.age,
                     gender: m.gender,
-                    id_number: m.id_number,  // ✅ Full Aadhaar from GET /api/teams/:id
-                    mobile: m.mobile,        // ✅ Full Mobile from GET /api/teams/:id
+                    id_number: m.id_number,
+                    mobile: m.mobile,
                     email: m.email,
                     state: m.state,
                     district: m.district,
@@ -91,14 +95,6 @@ export const fetchTeamFullDetails = async (teamId) => {
     }
 };
 
-export const verifyTeam = async (teamId) => {
-    const response = await fetch(`${API_URL}/api/teams/${teamId}/verify`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' }
-    });
-    return response.json();
-};
-
 export const deleteTeam = async (teamId) => {
     const response = await fetch(`${API_URL}/api/teams/${teamId}`, {
         method: 'DELETE'
@@ -107,6 +103,7 @@ export const deleteTeam = async (teamId) => {
 };
 
 // ✅ FIXED: Fetch full team details before downloading JSON
+// ✅ FIXED: Download JSON with formatted dates
 export const downloadTeamJSON = async (team) => {
     try {
         // Fetch full team details with unmasked data
@@ -121,11 +118,11 @@ export const downloadTeamJSON = async (team) => {
             registered_date: fullTeam.submittedAt,
             members: fullTeam.members.map(m => ({
                 name: m.name,
-                date_of_birth: m.dob,
+                date_of_birth: m.dob,  // ✅ Already formatted as DD-MM-YYYY
                 age: m.age,
                 gender: m.gender,
-                aadhaar_number: m.id_number,  // ✅ Full Aadhaar
-                mobile_number: m.mobile,      // ✅ Full Mobile
+                aadhaar_number: m.id_number,
+                mobile_number: m.mobile,
                 email: m.email,
                 address: {
                     door_no: m.doorno,
@@ -159,7 +156,6 @@ export const downloadTeamJSON = async (team) => {
         alert('Failed to download JSON with full details');
     }
 };
-
 export const downloadPhotosZip = async (team) => {
     const JSZip = (await import('jszip')).default;
     const { saveAs } = await import('file-saver');
