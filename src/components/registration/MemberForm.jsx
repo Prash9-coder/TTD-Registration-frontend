@@ -76,6 +76,48 @@ const MemberForm = ({ memberIndex }) => {
                 body: fd
             });
 
+            const fetchMemberByAadhaar = async (aadhaar) => {
+                try {
+                    const API_URL = process.env.REACT_APP_API_URL || 'https://ttd-registration.onrender.com';
+
+                    const res = await fetch(`${API_URL}/api/member/by-aadhaar/${aadhaar}`);
+                    const result = await res.json();
+
+                    if (result.success && result.exists) {
+                        const m = result.data;
+
+                        const autoData = {
+                            ...formData,
+                            name: m.name,
+                            dob: m.dob,
+                            age: calculateAge(m.dob),
+                            gender: m.gender,
+                            id_number: m.id_number,
+                            mobile: m.mobile,
+                            email: m.email,
+                            state: m.state,
+                            district: m.district,
+                            city: m.city,
+                            street: m.street,
+                            doorno: m.doorno,
+                            pincode: m.pincode,
+                            nearest_ttd_temple: m.nearest_ttd_temple,
+                            photoUrl: m.photo_path,
+                            photoPreview: m.photo_path
+                        };
+
+                        setFormData(autoData);
+                        updateMember(memberIndex, autoData);
+
+                        showToast("Existing member found. Auto-filled details!", "success");
+                    }
+
+                } catch (err) {
+                    console.log("Autofill error", err);
+                }
+            };
+
+
             // try parse JSON safely
             const result = await response.json().catch(() => null);
 
@@ -219,7 +261,10 @@ const MemberForm = ({ memberIndex }) => {
                         type="text"
                         value={formData.id_number || ''}
                         onChange={(e) => handleChange('id_number', e.target.value)}
-                        onBlur={() => handleAadhaarValidation(formData.id_number)}
+                        onBlur={() => {
+                            handleAadhaarValidation(formData.id_number);
+                            fetchMemberByAadhaar(formData.id_number);
+                        }}
                         maxLength="12"
                         className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.id_number ? 'border-red-500' : aadhaarStatus.valid ? 'border-green-500' : 'border-gray-300'}`}
                         placeholder="Enter 12-digit Aadhaar"
