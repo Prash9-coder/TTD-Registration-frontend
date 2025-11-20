@@ -44,32 +44,93 @@ const MemberForm = ({ memberIndex }) => {
         }
     };
 
-    const handlePhotoUpload = (e) => {
+    // ✅ UPDATED PHOTO UPLOAD FUNCTION - Uploads to Cloudinary
+    const handlePhotoUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
+        // Validation
         if (!['image/jpeg', 'image/jpg'].includes(file.type)) {
             setErrors({ ...errors, photo: 'Only JPG/JPEG files are allowed' });
             return;
         }
 
-        if (file.size > 1 * 1024 * 1024) {
-            setErrors({ ...errors, photo: 'File size must be less than 1MB' });
+        if (file.size > 2 * 1024 * 1024) {
+            setErrors({ ...errors, photo: 'File size must be less than 2MB' });
             return;
         }
 
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const newData = {
-                ...formData,
-                photo: file,
-                photoPreview: e.target.result
-            };
-            setFormData(newData);
-            updateMember(memberIndex, newData);
-            setErrors({ ...errors, photo: '' });
+        // Show loading state with temporary preview
+        const tempPreview = URL.createObjectURL(file);
+        const loadingData = {
+            ...formData,
+            photoUploading: true,
+            photoPreview: tempPreview
         };
-        reader.readAsDataURL(file);
+        setFormData(loadingData);
+        updateMember(memberIndex, loadingData);
+
+        try {
+            // Upload to Cloudinary via backend
+            const API_URL = process.env.REACT_APP_API_URL || 'https://ttd-registration.onrender.com';
+
+            const formDataToSend = new FormData();
+            formDataToSend.append('photo', file);
+
+            console.log(`📤 Uploading photo for Member ${memberIndex + 1}...`);
+
+            const response = await fetch(`${API_URL}/api/upload/photo`, {
+                method: 'POST',
+                body: formDataToSend
+            });
+
+            const result = await response.json();
+
+            if (!response.ok || !result.success) {
+                throw new Error(result.message || 'Upload failed');
+            }
+
+            console.log('✅ Upload successful:', result.data);
+
+            // ✅ Store the FULL Cloudinary URL
+            const uploadedData = {
+                ...formData,
+                photo: result.data.url,  // Full Cloudinary URL
+                photoPreview: result.data.url,  // Use Cloudinary URL for preview
+                cloudinary_id: result.data.cloudinary_id,
+                photoUploading: false
+            };
+
+            setFormData(uploadedData);
+            updateMember(memberIndex, uploadedData);
+            setErrors({ ...errors, photo: '' });
+
+            console.log('✅ Photo URL saved:', result.data.url);
+
+            // Clean up temporary preview URL
+            URL.revokeObjectURL(tempPreview);
+
+        } catch (error) {
+            console.error('❌ Upload error:', error);
+
+            setErrors({
+                ...errors,
+                photo: error.message || 'Upload failed. Please try again.'
+            });
+
+            // Reset upload state
+            const errorData = {
+                ...formData,
+                photoUploading: false,
+                photoPreview: null,
+                photo: null
+            };
+            setFormData(errorData);
+            updateMember(memberIndex, errorData);
+
+            // Clean up temporary preview URL
+            URL.revokeObjectURL(tempPreview);
+        }
     };
 
     return (
@@ -107,6 +168,7 @@ const MemberForm = ({ memberIndex }) => {
                         type="date"
                         value={formData.dob}
                         onChange={(e) => handleChange('dob', e.target.value)}
+                        max={new Date().toISOString().split('T')[0]}
                         className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.dob ? 'border-red-500' : 'border-gray-300'
                             }`}
                     />
@@ -323,11 +385,11 @@ const MemberForm = ({ memberIndex }) => {
                     {errors.nearest_ttd_temple && <p className="text-red-500 text-sm mt-1">{errors.nearest_ttd_temple}</p>}
                 </div>
 
-                {/* Photo Upload */}
+                {/* Photo Upload - UPDATED SECTION */}
                 <div className="md:col-span-2">
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
                         <Upload className="w-4 h-4 inline mr-1" />
-                        Passport Size Photo * (JPG/JPEG, max 1MB)
+                        Passport Size Photo * (JPG/JPEG, max 2MB)
                     </label>
                     <div className="flex items-start gap-4">
                         <div className="flex-1">
@@ -335,10 +397,40 @@ const MemberForm = ({ memberIndex }) => {
                                 type="file"
                                 accept="image/jpeg,image/jpg"
                                 onChange={handlePhotoUpload}
-                                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                                disabled={formData.photoUploading}
+                                className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 ${formData.photoUploading ? 'opacity-50 cursor-not-allowed' : ''
+                                    } ${errors.photo ? 'border-red-500' : 'border-gray-300'}`}
                             />
-                            {errors.photo && <p className="text-red-500 text-sm mt-1">{errors.photo}</p>}
+
+                            {/* Error Message */}
+                            {errors.photo && (
+                                <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
+                                    <XCircle className="w-4 h-4" />
+                                    {errors.photo}
+                                </p>
+                            )}
+
+                            {/* Uploading State */}
+                            {formData.photoUploading && (
+                                <p className="text-blue-600 text-sm mt-1 flex items-center gap-2">
+                                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                    </svg>
+                                    Uploading to cloud storage...
+                                </p>
+                            )}
+
+                            {/* Success Message */}
+                            {formData.photo && !formData.photoUploading && (
+                                <p className="text-green-600 text-sm mt-1 flex items-center gap-1">
+                                    <CheckCircle className="w-4 h-4" />
+                                    Photo uploaded successfully
+                                </p>
+                            )}
                         </div>
+
+                        {/* Photo Preview */}
                         {formData.photoPreview && (
                             <motion.div
                                 initial={{ scale: 0 }}
@@ -349,7 +441,20 @@ const MemberForm = ({ memberIndex }) => {
                                     src={formData.photoPreview}
                                     alt="Preview"
                                     className="w-32 h-32 object-cover border-4 border-blue-200 rounded-xl shadow-lg"
+                                    onError={(e) => {
+                                        console.error('Image preview failed:', formData.photoPreview);
+                                        e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="128" height="128"%3E%3Crect fill="%23ddd" width="128" height="128"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23666"%3ENo Image%3C/text%3E%3C/svg%3E';
+                                    }}
                                 />
+                                {/* Loading Overlay */}
+                                {formData.photoUploading && (
+                                    <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-xl">
+                                        <svg className="animate-spin h-8 w-8 text-white" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                        </svg>
+                                    </div>
+                                )}
                             </motion.div>
                         )}
                     </div>
