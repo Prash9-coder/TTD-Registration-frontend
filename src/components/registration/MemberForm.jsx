@@ -22,7 +22,13 @@ const MemberForm = ({ memberIndex }) => {
             const newData = { ...prev, [field]: value };
 
             if (field === 'dob' && value) {
-                newData.age = calculateAge(value);
+                // Ensure the date is in yyyy-MM-dd format
+                const date = new Date(value);
+                if (!isNaN(date.getTime())) {
+                    const formattedDate = date.toISOString().split('T')[0];
+                    newData.dob = formattedDate;
+                    newData.age = calculateAge(formattedDate);
+                }
             }
 
             // Persist to global store

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { RefreshCw, PlusCircle, FolderOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -7,15 +7,17 @@ import StatsCards from '../components/admin/StatsCards';
 import FiltersBar from '../components/admin/FiltersBar';
 import TeamCard from '../components/admin/TeamCard';
 import TeamDetailModal from '../components/admin/TeamDetailModal';
+import EditTeamModal from '../components/admin/EditTeamModal';
 import {
     fetchAllTeams,
-    fetchTeamFullDetails,  // ✅ NEW IMPORT
+    fetchTeamFullDetails,
     verifyTeam,
     deleteTeam,
     downloadTeamJSON,
-    downloadPhotosZip
+    downloadPhotosZip,
+    updateTeam
 } from '../services/adminService';
-import { printTeam } from '../utils/printUtils';
+import { printTeam, printTeamWithTransparentBackground } from '../utils/printUtils';
 
 const Admin = () => {
     const navigate = useNavigate();
@@ -25,7 +27,8 @@ const Admin = () => {
     const [filteredTeams, setFilteredTeams] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedTeam, setSelectedTeam] = useState(null);
-    const [loadingTeamDetails, setLoadingTeamDetails] = useState(false); // ✅ NEW
+    const [loadingTeamDetails, setLoadingTeamDetails] = useState(false);
+    const [editingTeam, setEditingTeam] = useState(null);
 
     const [filters, setFilters] = useState({
         search: '',
@@ -33,15 +36,8 @@ const Admin = () => {
         sort: 'newest'
     });
 
-    useEffect(() => {
-        loadTeams();
-    }, []);
-
-    useEffect(() => {
-        applyFilters();
-    }, [filters, allTeams]);
-
-    const loadTeams = async () => {
+    // ✅ Load Teams Function
+    const loadTeams = useCallback(async () => {
         setLoading(true);
         try {
             const teams = await fetchAllTeams();
@@ -54,9 +50,10 @@ const Admin = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [showToast]);
 
-    const applyFilters = () => {
+    // ✅ Apply Filters Function
+    const applyFilters = useCallback(() => {
         let result = [...allTeams];
 
         if (filters.search) {
@@ -83,13 +80,14 @@ const Admin = () => {
         });
 
         setFilteredTeams(result);
-    };
+    }, [allTeams, filters]);
 
+    // ✅ Clear Filters
     const handleClearFilters = () => {
         setFilters({ search: '', status: '', sort: 'newest' });
     };
 
-    // ✅ FIXED: Fetch full details before opening modal
+    // ✅ View Team Details
     const handleViewDetails = async (team) => {
         setLoadingTeamDetails(true);
         try {
@@ -105,6 +103,65 @@ const Admin = () => {
         }
     };
 
+    // ✅ Edit Team
+    const handleEditTeam = async (team) => {
+        setLoadingTeamDetails(true);
+        try {
+            console.log('Fetching full details for editing team:', team._id);
+            const fullTeamDetails = await fetchTeamFullDetails(team._id);
+            console.log('Full team details for editing:', fullTeamDetails);
+            setEditingTeam(fullTeamDetails);
+        } catch (error) {
+            console.error('Failed to load team details for editing:', error);
+            showToast('Failed to load team details for editing', 'error');
+        } finally {
+            setLoadingTeamDetails(false);
+        }
+    };
+
+    // ✅ Save Team
+    const handleSaveTeam = async (updatedTeam) => {
+        try {
+            console.log('Saving updated team:', updatedTeam._id);
+            
+            const updatePayload = {
+                team_name: updatedTeam.team_name,
+                admin_notes: updatedTeam.admin_notes,
+                members: updatedTeam.members.map(member => ({
+                    name: member.name,
+                    dob: member.dob,
+                    age: member.age,
+                    gender: member.gender,
+                    id_number_full: member.id_number_full,
+                    mobile_full: member.mobile_full,
+                    email: member.email,
+                    state: member.state,
+                    district: member.district,
+                    city: member.city,
+                    street: member.street,
+                    doorno: member.doorno,
+                    pincode: member.pincode,
+                    nearest_ttd_temple: member.nearest_ttd_temple,
+                    photo_path: member.photo_path
+                }))
+            };
+
+            const result = await updateTeam(updatedTeam._id, updatePayload);
+            
+            if (result.success) {
+                showToast('Team updated successfully!', 'success');
+                loadTeams();
+                setEditingTeam(null);
+            } else {
+                showToast(result.message || 'Failed to update team', 'error');
+            }
+        } catch (error) {
+            console.error('Update team error:', error);
+            showToast('Failed to update team', 'error');
+        }
+    };
+
+    // ✅ Verify Team
     const handleVerifyTeam = async (teamId) => {
         if (!window.confirm('Are you sure you want to verify this team?')) return;
 
@@ -122,6 +179,7 @@ const Admin = () => {
         }
     };
 
+    // ✅ Delete Team
     const handleDeleteTeam = async (team) => {
         if (!window.confirm(`Delete team "${team.team_name}" permanently?`)) return;
 
@@ -139,11 +197,13 @@ const Admin = () => {
         }
     };
 
+    // ✅ Export JSON
     const handleExportJSON = (team) => {
         downloadTeamJSON(team);
         showToast('Downloading JSON...', 'info');
     };
 
+    // ✅ Download Photos
     const handleDownloadPhotos = async (team) => {
         showToast('Preparing photos ZIP...', 'info');
         try {
@@ -155,10 +215,29 @@ const Admin = () => {
         }
     };
 
+    // ✅ Print Team
     const handlePrint = (team) => {
         printTeam(team);
         showToast('Preparing print...', 'info');
     };
+
+    // ✅ Print with Transparent Background
+    const handlePrintTransparent = (team) => {
+        printTeamWithTransparentBackground(team);
+        showToast('Preparing print with transparent background...', 'info');
+    };
+
+    // ✅✅ CRITICAL: Load teams on component mount
+    useEffect(() => {
+        loadTeams();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // ✅✅ CRITICAL: Apply filters when allTeams or filters change
+    useEffect(() => {
+        applyFilters();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [allTeams, filters]);
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-red-50">
@@ -244,13 +323,15 @@ const Admin = () => {
                                         key={team._id}
                                         team={team}
                                         index={index}
-                                        onViewDetails={handleViewDetails}  /* ✅ UPDATED */
+                                        onViewDetails={handleViewDetails}
                                         onExportPDF={handlePrint}
                                         onPrint={handlePrint}
                                         onExportJSON={handleExportJSON}
                                         onDownloadPhotos={handleDownloadPhotos}
                                         onVerify={handleVerifyTeam}
                                         onDelete={handleDeleteTeam}
+                                        onEdit={handleEditTeam}
+                                        onPrintTransparent={handlePrintTransparent}
                                     />
                                 ))}
                             </div>
@@ -259,7 +340,7 @@ const Admin = () => {
                 )}
             </div>
 
-            {/* Detail Modal - ✅ Now receives full details */}
+            {/* Detail Modal */}
             {selectedTeam && (
                 <TeamDetailModal
                     team={selectedTeam}
@@ -267,9 +348,18 @@ const Admin = () => {
                 />
             )}
 
-            {/* ✅ Loading overlay when fetching team details */}
+            {/* Edit Modal */}
+            {editingTeam && (
+                <EditTeamModal
+                    team={editingTeam}
+                    onClose={() => setEditingTeam(null)}
+                    onSave={handleSaveTeam}
+                />
+            )}
+
+            {/* Loading Overlay */}
             {loadingTeamDetails && (
-                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 flex items-center justify-center">
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center">
                     <motion.div
                         animate={{ rotate: 360 }}
                         transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
